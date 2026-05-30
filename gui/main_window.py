@@ -13,7 +13,7 @@ from solver.core import run_fluid_simulation
 class MainWindowApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("LunarCFD v0.1.0.0")
+        self.root.title("LunarCFD v0.1.1.0")
         self.root.geometry("1400x768")
         self.kill_event = threading.Event()
         self.pause_event = threading.Event()
@@ -23,6 +23,7 @@ class MainWindowApp:
         self.session_io = SessionManager(self)
         self.build_ui_layout()
         self.start_watchdog()
+        threading.Thread(target=self._warmup_numba, daemon=True).start()
 
     def build_ui_layout(self):
         # ── Toolbar ──────────────────────────────────────────────────────────
@@ -105,7 +106,20 @@ class MainWindowApp:
         grid_menu.config(anchor="w", bg="#f5f5f5")
         grid_menu.pack(fill=tk.X, padx=5)
 
+        # ── CPU Cores selector ────────────────────────────────────────────────
+        tk.Label(panel_frame, text="CPU Cores (1–6):", bg="#f5f5f5", anchor="w").pack(fill=tk.X, padx=5)
+        _max_cores = min(psutil.cpu_count(logical=False) or 1, 6)
+        self.var_cores = tk.IntVar(value=_max_cores)
+        tk.Spinbox(panel_frame, from_=1, to=6, textvariable=self.var_cores,
+                   width=5, bg="#f5f5f5").pack(fill=tk.X, padx=5)
+
         self.ent_hist_interval = lbl_entry("History Row Interval:", "50")
+
+        self.var_show_matrix = tk.BooleanVar(value=True)
+        self.var_show_matrix.trace_add("write", lambda *_: self._refresh_matrix_overlay())
+        tk.Checkbutton(panel_frame, text="Show/Update velocity matrix",
+                       variable=self.var_show_matrix,
+                       bg="#f5f5f5", anchor="w").pack(fill=tk.X, padx=5)
 
         self.var_show_geom = tk.BooleanVar(value=True)
         self.var_show_geom.trace_add("write", lambda *_: self._refresh_matrix_overlay())
@@ -236,6 +250,7 @@ class MainWindowApp:
             "dt":            dt_val,
             "grid":          self.var_grid.get().split("x")[0],
             "hist_interval": hist_interval,
+            "cores":         int(self.var_cores.get()),
         }
         threading.Thread(target=run_fluid_simulation, args=(self, payload), daemon=True).start()
 
@@ -399,7 +414,9 @@ class MainWindowApp:
         self._body_mask = mask
 
     def _refresh_matrix_overlay(self):
-        """Re-render the matrix immediately when the geometry toggle changes."""
+        """Re-render the matrix when the geometry or matrix toggle changes."""
+        if not self.var_show_matrix.get():
+            return
         if not hasattr(self, '_last_matrix') or self._last_matrix is None:
             return
         sr, sc = self._matrix_slice()
@@ -411,8 +428,9 @@ class MainWindowApp:
         self.var_cl.set(f"Cl: {cl:.4f}")
         self.var_cd.set(f"Cd: {cd:.4f}")
         self.var_ld.set(f"L/D Ratio: {ld_ratio:.4f}")
-        sr, sc = self._matrix_slice()
-        self._render_matrix_colored(matrix[sr, sc])
+        if self.var_show_matrix.get():
+            sr, sc = self._matrix_slice()
+            self._render_matrix_colored(matrix[sr, sc])
 
     def append_history_row(self, i, res, cl, cd, ld):
         """Add one row to the right-side iteration history table."""
@@ -427,25 +445,36 @@ class MainWindowApp:
         self.solver_running = False
         self.pause_event.clear()
         self.btn_pause.config(text="Pause")
-        self._set_status("failure" if state == "NaN error" else "success")
+        _state_labels = {
+            "Converged (steady)":   ("success", "Converged: Steady"),
+            "Converged (periodic)": ("success", "Converged: Periodic"),
+            "Max iterations reached": ("success", "Max Iterations Reached"),
+            "Finalized":            ("success", "Finalized by User"),
+            "NaN error":            ("failure", "Failed: NaN Error"),
+        }
+        btn_state, btn_text = _state_labels.get(state, ("success", "Simulation Complete"))
+        self._set_status(btn_state, btn_text)
         self.var_cl.set(f"Cl: {cl:.4f}")
         self.var_cd.set(f"Cd: {cd:.4f}")
         self.var_ld.set(f"L/D Ratio: {ld_ratio:.4f}")
-        sr, sc = self._matrix_slice()
-        self._render_matrix_colored(matrix[sr, sc])
+        if self.var_show_matrix.get():
+            sr, sc = self._matrix_slice()
+            self._render_matrix_colored(matrix[sr, sc])
 
 
     # ── Status button helper ──────────────────────────────────────────────────
-    def _set_status(self, state):
+    def _set_status(self, state, text=None):
         """Update the colour-coded status label at the bottom of the left panel.
 
         state values:
-          'ready'      — grey  (initial / after restart)
+          'ready'      — grey   (initial / after restart)
           'running'    — yellow (solver active)
           'paused'     — yellow (solver paused)
           'finalizing' — yellow (stop requested, draining)
           'success'    — green  (any clean completion)
           'failure'    — red    (NaN / solver error)
+
+        Pass text= to override the default label (e.g. convergence reason).
         """
         cfg = {
             "ready":      ("Ready",               "#cccccc", "#333333"),
@@ -455,8 +484,8 @@ class MainWindowApp:
             "success":    ("Simulation Complete", "#4caf50", "#ffffff"),
             "failure":    ("Simulation Failed",   "#e53935", "#ffffff"),
         }
-        text, bg, fg = cfg.get(state, cfg["ready"])
-        self.btn_status.config(text=text, bg=bg, fg=fg)
+        default_text, bg, fg = cfg.get(state, cfg["ready"])
+        self.btn_status.config(text=text or default_text, bg=bg, fg=fg)
 
     # ── Help window ───────────────────────────────────────────────────────────
     def toggle_help(self):
@@ -591,6 +620,14 @@ class MainWindowApp:
             "  320×320  — ~1–2 hr.   Best accuracy."
         )
 
+        param("CPU Cores (1–6)")
+        body(
+            "Number of CPU cores used by the parallel pressure solver. More cores "
+            "= faster pressure solve with no change to physics or Cl/Cd values. "
+            "Defaults to the number of physical cores on your machine, capped at 6. "
+            "Set to 1 for single-core operation (slowest, lowest CPU load)."
+        )
+
         param("History Row Interval")
         body(
             "Iterations between rows added to the history table on the right. "
@@ -621,6 +658,24 @@ class MainWindowApp:
         tk.Button(win, text="Close Help", command=win.destroy,
                   bg="#ddeeff", font=("Arial", 10), padx=12, pady=4
                   ).pack(pady=(4, 10))
+
+
+    def _warmup_numba(self):
+        """Pre-compile the Numba JIT SOR function at startup (background thread).
+
+        The first call to an @njit function triggers LLVM compilation, which
+        takes ~2–5 s.  Running it here with a tiny dummy array means the first
+        real simulation starts immediately without a compile pause.
+        """
+        try:
+            from solver.core import _sor_step
+            _p  = np.zeros((5, 5), dtype=np.float64)
+            _pn = np.zeros((5, 5), dtype=np.float64)
+            _b  = np.zeros((5, 5), dtype=np.float64)
+            _m  = np.zeros((5, 5), dtype=bool)
+            _sor_step(_p, _pn, _b, _m, float(0.6), 5, 5)
+        except Exception:
+            pass
 
 
 def launch_main_gui():

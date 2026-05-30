@@ -1,11 +1,52 @@
 import numpy as np
 import time
+import os
+import psutil
+import numba
+from numba import njit, prange
 from solver.geometry import get_naca_mask
+
+@njit(parallel=True)
+def _sor_step(press, pn, b, mask, omega, ny, nx):
+    """
+    Parallel Jacobi SOR step for the pressure Poisson equation.
+
+    Reads exclusively from pn (previous-iteration snapshot) and writes interior
+    fluid cells to press.  Because every cell reads only from pn — which is
+    never written inside this function — all row-level updates are independent
+    and safe to parallelise with prange.
+
+    This is mathematically identical to the original numpy SOR (same Jacobi
+    update order, same clipping), so Cl/Cd values are unchanged.  Speed
+    improvement comes from multi-core parallelism and elimination of numpy
+    temporary arrays.
+    """
+    for j in prange(1, ny - 1):
+        for i in range(1, nx - 1):
+            if not mask[j, i]:
+                p_new = (pn[j, i+1] + pn[j, i-1] +
+                         pn[j+1, i] + pn[j-1, i] - b[j, i]) * 0.25
+                if   p_new >  5.0: p_new =  5.0
+                elif p_new < -5.0: p_new = -5.0
+                p_sor = (1.0 - omega) * pn[j, i] + omega * p_new
+                if   p_sor >  5.0: p_sor =  5.0
+                elif p_sor < -5.0: p_sor = -5.0
+                press[j, i] = p_sor
 
 def run_fluid_simulation(gui, p):
     start_time = time.perf_counter()
     _g = str(p.get("grid", "160"))
     print(f"--- Solver Core Started (Re: {p.get('re')}, AoA: {p.get('aoa')}, Grid: {_g}x{_g}, dt: {p.get('dt', 0.2)}) ---")
+
+    # Change 1 — High process priority: gives the solver preferential CPU scheduling
+    try:
+        psutil.Process(os.getpid()).nice(psutil.HIGH_PRIORITY_CLASS)
+    except Exception:
+        pass
+
+    # Change 2+3 — Set Numba thread count for parallel SOR (clamped 1–6)
+    n_cores = max(1, min(6, int(p.get("cores", 1))))
+    numba.set_num_threads(n_cores)
 
     # Grid configs: (nx, ny, chord, center_x, center_y)
     _gcfg = {"80":  (80,  80,  32,  20,  40),
@@ -214,10 +255,8 @@ def run_fluid_simulation(gui, p):
             b   = (rho/dt) * div
             for _ in range(300):
                 np.copyto(pn, press)
-                new_p = (pn[1:-1,2:]+pn[1:-1,0:-2]+pn[2:,1:-1]+pn[0:-2,1:-1]-b[1:-1,1:-1])/4
-                new_p = np.clip(new_p, -5, 5)
-                press[1:-1,1:-1] = (1-omega)*pn[1:-1,1:-1] + omega*new_p
-                press[1:-1,1:-1] = np.clip(press[1:-1,1:-1], -5, 5)  # bound after SOR so omega>1 can't escape ±5
+                _sor_step(press, pn, b, mask, omega, ny, nx)   # parallel Jacobi SOR
+                press[1:-1,1:-1] = np.clip(press[1:-1,1:-1], -5, 5)  # safety clamp
                 press[mask] = pn[mask]
                 press[:,0]=press[:,1];  press[:,-1]=press[:,-2]
                 press[0,:]=press[1,:];  press[-1,:]=press[-2,:]
@@ -277,9 +316,8 @@ def run_fluid_simulation(gui, p):
                     print(f"Plateau at {i} (res={res:.2e}). Periodic regime.");  break
 
             # ── Live GUI updates ──────────────────────────────────────────────
-            if i % 10 == 0:
-                elapsed = time.perf_counter() - start_time
-                gui.root.after(0, gui.update_live_metrics, i, res, elapsed)
+            elapsed = time.perf_counter() - start_time
+            gui.root.after(0, gui.update_live_metrics, i, res, elapsed)
 
             if i % 50 == 0 and i > 0:
                 cl, cd, ld_ratio = compute_cl_cd()

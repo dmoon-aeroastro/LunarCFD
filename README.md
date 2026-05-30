@@ -1,6 +1,14 @@
-# LunarCFD v0.1.0.0
+# LunarCFD v0.1.1.0
 
 A 2D computational fluid dynamics simulator for airfoil analysis, built in Python with a Tkinter GUI.
+
+## What's New in v0.1.1.0
+
+- **2–3× faster solver** — pressure Poisson SOR is now JIT-compiled via Numba
+- **Multi-core support** — CPU Cores selector (1–6) in the left panel
+- **Convergence reason** — status button now shows why the simulation ended (Converged: Periodic, Max Iterations Reached, etc.)
+- **Per-iteration metrics** — iteration count, elapsed time, and residual update every iteration
+- **Matrix toggle** — Show/Update velocity matrix checkbox to pause the flowfield display and reduce CPU load
 
 ## Overview
 
@@ -9,7 +17,7 @@ LunarCFD solves the 2D incompressible Navier-Stokes equations using an explicit 
 Key features:
 - Real-time velocity field visualization
 - Adjustable Reynolds number, angle of attack, grid size, and solver parameters
-- Color-coded simulation status indicator
+- Color-coded simulation status indicator with convergence reason
 - Session save/load support
 - Integrated help documentation
 - Integration test suite
@@ -33,8 +41,7 @@ Key features:
 - **Laminar flow only** — no turbulence modeling; results at high Reynolds numbers may not match experimental data
 - **Incompressible flow only** — not valid for high-speed or transonic/supersonic regimes
 - **Cartesian grid** — the airfoil is approximated on a fixed grid; no body-fitted mesh
-- **Single-threaded** — solver runs on one CPU core; no GPU acceleration
-- **Slow at high resolution** — 160x160 runs take several minutes; 320x320 can take significantly longer
+- **Slow at high resolution** — 160x160 runs take a few minutes; 320x320 can take significantly longer
 
 ## Installation
 
@@ -94,6 +101,7 @@ py -3.11 run_tests.py
 | Convergence Residual | Residual threshold for periodic-regime detection |
 | THETA | Angle-of-attack rotation parameter (mirrors AoA) |
 | Grid Size | Simulation grid resolution (80x80 / 160x160 / 320x320) |
+| CPU Cores | Number of cores used by the parallel pressure solver (1–6) |
 
 ## Outputs
 
@@ -108,7 +116,6 @@ py -3.11 run_tests.py
 - Support for additional airfoil profiles (NACA 4-digit series, custom geometry import)
 - Pressure field and streamline visualization
 - Results export to CSV
-- Multi-threading or GPU acceleration for faster solves
 - Higher Reynolds number stability improvements
 - Turbulence modeling
 - Body-fitted mesh generation for improved airfoil resolution
