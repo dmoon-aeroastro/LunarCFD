@@ -14,29 +14,30 @@ Key features:
 - Integrated help documentation
 - Integration test suite
 
-## Requirements
+## Installation
 
-- Python 3.9+
-- numpy
-- psutil
-- scipy
+**Windows PowerShell:**
 
-Install dependencies:
+> Please ensure you have installed [Python 3.11](https://www.python.org/downloads/release/python-3110/) and [Git](https://git-scm.com/download/win) before running these commands.
 
-```
+```powershell
+git clone https://github.com/dmoon-aeroastro/LunarCFD.git
+
+cd LunarCFD
+
+py -3.11 -m venv env
+
+env\Scripts\activate
+
 pip install -r requirements.txt
-```
 
-## Running
-
-```
-python main.py
+py main.py
 ```
 
 ## Running Tests
 
-```
-python run_tests.py
+```powershell
+py run_tests.py
 ```
 
 ## Parameters
