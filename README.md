@@ -14,6 +14,28 @@ Key features:
 - Integrated help documentation
 - Integration test suite
 
+## Capabilities
+
+- Simulates 2D incompressible flow around a NACA 0012 airfoil
+- Supports Reynolds numbers from 1 to 10,000
+- Angle of attack adjustable across a wide range (positive and negative)
+- Three grid resolutions: 80x80, 160x160, and 320x320
+- Real-time velocity field visualization during simulation
+- Automatic convergence detection for periodic (vortex shedding) flow regimes
+- Computes lift coefficient (Cl), drag coefficient (Cd), and lift-to-drag ratio (L/D)
+- Session save and load for resuming or comparing runs
+- Built-in integration test suite to verify solver correctness
+
+## Limitations
+
+- **2D only** — no 3D effects, spanwise flow, tip vortices, or finite wing behavior
+- **NACA 0012 only** — no support for other airfoil profiles in this release
+- **Laminar flow only** — no turbulence modeling; results at high Reynolds numbers may not match experimental data
+- **Incompressible flow only** — not valid for high-speed or transonic/supersonic regimes
+- **Cartesian grid** — the airfoil is approximated on a fixed grid; no body-fitted mesh
+- **Single-threaded** — solver runs on one CPU core; no GPU acceleration
+- **Slow at high resolution** — 160x160 runs take several minutes; 320x320 can take significantly longer
+
 ## Installation
 
 **Windows PowerShell:**
@@ -36,10 +58,26 @@ pip install -r requirements.txt
 py -3.11 main.py
 ```
 
+## Updating
+
+If you have already installed LunarCFD and want to get the latest version:
+
+```powershell
+cd LunarCFD
+
+env\Scripts\activate
+
+git pull
+
+pip install -r requirements.txt
+
+py -3.11 main.py
+```
+
 ## Running Tests
 
 ```powershell
-py run_tests.py
+py -3.11 run_tests.py
 ```
 
 ## Parameters
@@ -65,10 +103,20 @@ py run_tests.py
 | Cd | Drag coefficient |
 | L/D | Lift-to-drag ratio |
 
+## Future Updates
+
+- Support for additional airfoil profiles (NACA 4-digit series, custom geometry import)
+- Pressure field and streamline visualization
+- Results export to CSV
+- Multi-threading or GPU acceleration for faster solves
+- Higher Reynolds number stability improvements
+- Turbulence modeling
+- Body-fitted mesh generation for improved airfoil resolution
+
 ## Project Structure
 
 ```
-LunarCFD_v0.1.0.0/
+LunarCFD/
 ├── main.py           # Application entry point
 ├── run_tests.py      # Integration test suite
 ├── gui/
