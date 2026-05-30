@@ -13,7 +13,7 @@ from solver.core import run_fluid_simulation
 class MainWindowApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("LunarCFD v0.4.0.0")
+        self.root.title("LunarCFD v0.1.0.0")
         self.root.geometry("1400x768")
         self.kill_event = threading.Event()
         self.pause_event = threading.Event()
