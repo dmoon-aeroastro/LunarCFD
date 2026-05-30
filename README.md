@@ -27,11 +27,13 @@ cd LunarCFD
 
 py -3.11 -m venv env
 
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
 env\Scripts\activate
 
 pip install -r requirements.txt
 
-py main.py
+py -3.11 main.py
 ```
 
 ## Running Tests
