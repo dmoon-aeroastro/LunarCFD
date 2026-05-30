@@ -54,7 +54,7 @@ git clone https://github.com/dmoon-aeroastro/LunarCFD.git
 
 cd LunarCFD
 
-py -3.11 -m venv env
+python -m venv env
 
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
@@ -62,7 +62,7 @@ env\Scripts\activate
 
 pip install -r requirements.txt
 
-py -3.11 main.py
+python main.py
 ```
 
 ## Updating
@@ -78,13 +78,13 @@ git pull
 
 pip install -r requirements.txt
 
-py -3.11 main.py
+python main.py
 ```
 
 ## Running Tests
 
 ```powershell
-py -3.11 run_tests.py
+python run_tests.py
 ```
 
 ## Parameters
