@@ -1,143 +1,182 @@
-# LunarCFD v0.1.1.0
+# LunarCFD
 
-A 2D computational fluid dynamics simulator for airfoil analysis, built in Python with a Tkinter GUI.
+**LunarCFD v0.1.2.0** is a 2D computational fluid dynamics simulator for airfoil
+analysis, with an interactive desktop GUI. It solves the incompressible
+Navier–Stokes equations on a body-fitted O-grid wrapped around the airfoil, adds
+the Menter k-ω SST turbulence model above Re = 500, and reports the lift, drag,
+moment, and heat-transfer characteristics of the section together with a live
+flow-field visualisation.
 
-## What's New in v0.1.1.0
+> Research / learning tool. It is accurate where stated below and explicitly not
+> in others — please read **Accuracy & Margins of Error** before relying on a number.
 
-- **2–3× faster solver** — pressure Poisson SOR is now JIT-compiled via Numba
-- **Multi-core support** — CPU Cores selector (1–6) in the left panel
-- **Convergence reason** — status button now shows why the simulation ended (Converged: Periodic, Max Iterations Reached, etc.)
-- **Per-iteration metrics** — iteration count, elapsed time, and residual update every iteration
-- **Matrix toggle** — Show/Update velocity matrix checkbox to pause the flowfield display and reduce CPU load
+---
 
-## Overview
+## Features
 
-LunarCFD solves the 2D incompressible Navier-Stokes equations using an explicit projection method on a staggered Cartesian grid. The pressure Poisson equation is solved with Successive Over-Relaxation (SOR). It simulates flow around a NACA 0012 airfoil and computes lift coefficient (Cl), drag coefficient (Cd), and lift-to-drag ratio (L/D).
+- **Body-fitted O-grid (BFM)** solver — a curvilinear mesh wraps the airfoil
+  surface for clean boundary-layer and pressure resolution on symmetric and
+  cambered sections.
+- **Incompressible Navier–Stokes**, explicit fractional-step projection method,
+  central + JST advection.
+- **k-ω SST turbulence model** (Menter), activated automatically at Re ≥ 500,
+  with an automatic near-wall treatment (viscous-sublayer ↔ log-law blend).
+- **Local time-stepping** drives runs to a steady state several times faster
+  (standard in v0.1.2.0).
+- **Compiled kernels** — the hot loops run as Numba and (when built) Fortran
+  kernels, ~2–4× faster than plain NumPy, with an automatic
+  Fortran → Numba → NumPy fallback so it always runs.
+- **Live visualisation** — pressure, velocity, speed, vorticity, or temperature
+  fields with a geometry outline and a physical scale bar.
+- **Outputs** — Cl, Cd, L/D, Cm (about the quarter chord), physical lift/drag
+  (N/m), and Nusselt number.
+- **Built-in calculators** for Reynolds number, time step, and required
+  iterations.
 
-Key features:
-- Real-time velocity field visualization
-- Adjustable Reynolds number, angle of attack, grid size, and solver parameters
-- Color-coded simulation status indicator with convergence reason
-- Session save/load support
-- Integrated help documentation
-- Integration test suite
+NACA 0012 / 2412 / 4412 / 0006 and a 1×8 rectangle are built in; custom `.dat`
+airfoil coordinate files are also supported.
 
-## Capabilities
+---
 
-- Simulates 2D incompressible flow around a NACA 0012 airfoil
-- Supports Reynolds numbers from 1 to 10,000
-- Angle of attack adjustable across a wide range (positive and negative)
-- Three grid resolutions: 80x80, 160x160, and 320x320
-- Real-time velocity field visualization during simulation
-- Automatic convergence detection for periodic (vortex shedding) flow regimes
-- Computes lift coefficient (Cl), drag coefficient (Cd), and lift-to-drag ratio (L/D)
-- Session save and load for resuming or comparing runs
-- Built-in integration test suite to verify solver correctness
+## Requirements
 
-## Limitations
+- Python 3.11
+- `numpy`, `scipy`, `numba`  (Tkinter ships with standard CPython)
+- Optional: `psutil` (RAM/priority readout). A compiled Fortran kernel module is
+  used if present, but is not required — the solver falls back to Numba/NumPy.
 
-- **2D only** — no 3D effects, spanwise flow, tip vortices, or finite wing behavior
-- **NACA 0012 only** — no support for other airfoil profiles in this release
-- **Laminar flow only** — no turbulence modeling; results at high Reynolds numbers may not match experimental data
-- **Incompressible flow only** — not valid for high-speed or transonic/supersonic regimes
-- **Cartesian grid** — the airfoil is approximated on a fixed grid; no body-fitted mesh
-- **Slow at high resolution** — 160x160 runs take a few minutes; 320x320 can take significantly longer
+```bash
+pip install numpy scipy numba psutil
+```
 
-## Installation
+## Running
 
-**Windows PowerShell:**
-
-> Please ensure you have installed [Python 3.11](https://www.python.org/downloads/release/python-3110/) and [Git](https://git-scm.com/download/win) before running these commands.
-
-```powershell
-git clone https://github.com/dmoon-aeroastro/LunarCFD.git
-
-cd LunarCFD
-
-python -m venv env
-
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-
-env\Scripts\activate
-
-pip install -r requirements.txt
-
+```bash
 python main.py
 ```
 
-## Updating
+This opens the GUI. Set the airfoil, Reynolds number, angle of attack and grid,
+then **Run Solver**. The run auto-stops when the lift has converged.
 
-If you have already installed LunarCFD and want to get the latest version:
+---
 
-```powershell
-cd LunarCFD
+## Inputs (left panel)
 
-env\Scripts\activate
+| Field | Meaning | Default |
+|---|---|---|
+| Re | Reynolds number (target flow regime) | 500 000 |
+| Velocity (m/s) | Freestream speed; scales physical forces, not the dimensionless physics | 100 |
+| AoA (deg) | Angle of attack (inflow is rotated; the airfoil stays axis-aligned) | 0 |
+| Air Pressure (Pa) | Sets air density for physical force output | 101325 |
+| Max Iterations | Iteration cap (the solver may stop earlier on convergence) | 150000 |
+| dt (time step) | Dimensionless step; auto-clamped to a CFL-stable value | 2e-4 |
+| Omega | Pressure-solver relaxation (clamped to 0.05–1.0) | 0.6 |
+| Convergence Residual | Steady-state residual threshold | 1e-8 |
+| Wall Temp / Air Temp (K) | Thermal boundary conditions (drive Nusselt number) | 320 / 300 |
+| Chord (m, blank = auto) | Physical chord for force scaling; blank derives it from Re/ν/V | 1 |
+| Airfoil | NACA 0012 / 2412 / 4412 / 0006, rectangle, or custom `.dat` | NACA 0012 |
+| Grid Size | BFM O-grid resolution (see below) | BFM 96×48 |
 
-git pull
+Higher-order faces, Rhie–Chow momentum interpolation, and local time-stepping are
+**standard** in v0.1.2.0 (always on).
 
-pip install -r requirements.txt
+### Grid sizes
 
-python main.py
-```
+The grid is the BFM O-grid as *circumferential × radial* cells. The flow-field
+always renders at 320×320 pixels regardless of solve resolution.
 
-## Running Tests
+| Grid | Use |
+|---|---|
+| BFM 64×32 | Coarsest, fastest — quick exploration |
+| BFM 96×48 | Recommended starting point |
+| BFM 128×64 | Good standard accuracy |
+| BFM 256×128 | Fine near-wall resolution |
+| BFM 320×160 | Highest available; best for high-Re boundary layers |
 
-```powershell
-python run_tests.py
-```
+All grids use a 15-chord far-field radius and sinh near-wall stretching.
 
-## Parameters
+---
 
-| Parameter | Description |
-|-----------|-------------|
-| Re | Reynolds number (1–10000) |
-| Velocity | Inflow velocity magnitude |
-| AoA | Angle of attack in degrees |
-| Air Pressure | Ambient pressure for force calculation |
-| Max Iterations | Hard stop for the time-stepping loop |
-| dt | Time step size |
-| Omega | SOR relaxation factor (0 < omega < 2) |
-| Convergence Residual | Residual threshold for periodic-regime detection |
-| THETA | Angle-of-attack rotation parameter (mirrors AoA) |
-| Grid Size | Simulation grid resolution (80x80 / 160x160 / 320x320) |
-| CPU Cores | Number of cores used by the parallel pressure solver (1–6) |
+## Calculators (toolbar)
+
+Three helper windows size your inputs correctly:
+
+- **Re Calculator** — enter real velocity (m/s), chord (m), and air temperature
+  (°C). It computes the kinematic viscosity of air via Sutherland's law and then
+  `Re = V · L / ν`, shows the flow regime with a real-world example, and applies
+  the result to the Re field.
+- **dt Calculator** — choose a grid and a CFL target (0.05 is the stable cap for
+  the default scheme). It finds the smallest cell on that grid and returns
+  `dt = CFL × min_face`, plus the number of steps per chord-crossing. The solver
+  re-clamps any dt to its own stable limit, so the suggestion is always safe.
+- **Max Iterations Calculator** — choose a grid, a target number of
+  chord-crossings (≈15 gives ~95 %+ developed lift — the Wagner effect), and a dt;
+  it returns `iterations ≈ crossings ÷ dt`. Use it so a run develops far enough
+  for Cl to be accurate instead of stopping early and under-reading lift.
+
+---
 
 ## Outputs
 
-| Output | Description |
-|--------|-------------|
-| Cl | Lift coefficient |
-| Cd | Drag coefficient |
-| L/D | Lift-to-drag ratio |
+- **Cl, Cd, L/D** — lift, drag, and lift-to-drag ratio.
+- **Cm** — pitching moment about the quarter chord (nose-up positive).
+- **Lift / Drag (N/m)** — physical forces per unit span from the real density.
+- **Nusselt** — convective heat transfer (needs Wall Temp ≠ Air Temp).
 
-## Future Updates
+> Because local time-stepping is standard, the solver targets the **steady** state
+> and is not time-accurate. Vortex shedding, **Strouhal number**, and the Cl
+> oscillation amplitude are therefore not physically meaningful and the Strouhal
+> readout normally shows "—".
 
-- Support for additional airfoil profiles (NACA 4-digit series, custom geometry import)
-- Pressure field and streamline visualization
-- Results export to CSV
-- Higher Reynolds number stability improvements
-- Turbulence modeling
-- Body-fitted mesh generation for improved airfoil resolution
+---
 
-## Project Structure
+## Accuracy & Margins of Error
 
-```
-LunarCFD/
-├── main.py           # Application entry point
-├── run_tests.py      # Integration test suite
-├── gui/
-│   └── main_window.py
-├── solver/
-│   ├── core.py       # Navier-Stokes time-stepping and SOR pressure solver
-│   ├── geometry.py   # NACA 0012 airfoil mask generation
-│   └── guards.py     # Input validation
-├── file_io/
-│   └── session.py    # Session save/load
-└── mesh/
-    └── generator.py
-```
+Validated against published NACA polars (Abbott & von Doenhoff / NASA TMR), fully
+developed (~15 chord-crossings) with the standard settings. **Tested up to
+Re ≈ 500 000 — relatively low for aerospace — with spot checks near Re = 1 000 000.**
+
+- **Lift (Cl): within ~±5 % of published** for attached flow (AoA ≲ 8°).
+  Measured examples:
+
+  | Case | LunarCFD Cl | Reference | Agreement |
+  |---|---|---|---|
+  | NACA 0012, Re 1e6, α = 0° | ≈ 0 | 0 | ✓ |
+  | NACA 0012, Re 1e6, α = 4° | 0.416 | 0.43 | 97 % |
+  | NACA 0012, Re 1e6, α = 8° | 0.800 | 0.84 | 95 % |
+  | NACA 2412, Re 5e5, α = 0° | 0.21 | ~0.22 | 95 % |
+
+- **Drag (Cd): over-predicted, roughly 1.3–2× the reference.** This is inherent
+  to the method (fully-turbulent assumption with no transition, 2D, steady RANS).
+  Use Cd comparatively or as an order-of-magnitude estimate, not for a precise
+  drag budget.
+- **Moment (Cm): matches published** quarter-chord values — ≈ 0 for symmetric
+  sections, NACA 2412 ≈ −0.05, NACA 4412 ≈ −0.10 (measured 2412 α = 0° → −0.051).
+- **Lift develops slowly** (the Wagner effect): a run stopped too early reads low.
+  Use the Max Iterations Calculator, or let the auto-stop settle it.
+
+### Limitations
+
+- **2D, steady RANS** — no 3D structures (tip vortices, spanwise variation); no
+  time-accurate unsteadiness (shedding/Strouhal are not meaningful).
+- **Fully turbulent** — no laminar run / transition modelling, which inflates Cd.
+- **Post-stall** (typically AoA > 12–15° for NACA 0012) is not reliable at any Re.
+- Above the tested band (Re > ~1e6) results are extrapolation.
+
+---
+
+## Method
+
+- Cell-centred finite-volume incompressible Navier–Stokes on a body-fitted O-grid.
+- Explicit fractional-step (projection) time advance; central + JST 4th-difference
+  advection; point-implicit diffusion.
+- Pressure-Poisson via a Jacobi smoother (matrix-free CG available).
+- Menter k-ω SST turbulence with automatic wall treatment (Re ≥ 500).
+- Local time-stepping (per-cell pseudo time step) for fast steady convergence.
+- See `REFERENCES.md` for the method citations (Chorin, Menter SST, JST,
+  Rhie–Chow, …).
 
 ## License
 
-MIT License
+GNU General Public License v3.0 — see [LICENSE](LICENSE). © 2026 LunarCFD
+Development Team.

@@ -8,15 +8,38 @@ __pycache__/
 *.py[cod]
 *.pyo
 
-# Backup files
+# Backup / rollback files
 *.bak
 *.bak[0-9]*
+*_bak*.py
+*.py.bak*
+
+# Compiled extensions (rebuilt by f2py; the solver falls back to Numba/NumPy
+# when absent, so these are not committed)
+*.pyd
+*.so
+*.o
+*.mod
 
 # Build artifacts
 build/
 dist/
 *.spec
 *.egg-info/
+
+# Session scratch / diagnostics (logs, one-off test scripts, dumps)
+_*.py
+_*.log
+_*.txt
+_*.npz
+_*.seen
+_*.output
+# ...but keep the reusable validation harness
+!_camber_bench.py
+
+# Runtime artifacts (session autosave / crash recovery)
+autosave.json
+crash_log.txt
 
 # IDE / OS
 .vscode/
